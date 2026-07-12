@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import {defineProps} from "vue";
+import {defineProps, ref, watch} from "vue";
 import {db} from "../database";
 import {Model} from "../types/model.ts";
 import {CopyDocument} from "@element-plus/icons-vue";
@@ -19,7 +19,15 @@ const props = defineProps({
   }
 })
 
-const model: Model = await db.models.get(props.modelUuid) as Model
+const model = ref<Model | null>(null)
+let loadingId = 0
+
+watch(() => props.modelUuid, async (uuid) => {
+  const currentLoadingId = ++loadingId
+  const nextModel = uuid ? await db.models.get(uuid) as Model ?? null : null
+  if (currentLoadingId === loadingId) model.value = nextModel
+}, {immediate: true})
+
 const type_badges = [
   {text: "基础模型", offset: -42},
   {text: "LoRA", offset: -24},

@@ -16,6 +16,7 @@ import {db} from "../database";
 import {Templater} from "../types/templater.ts";
 import {ElMessage, ElMessageBox, ElSelect} from 'element-plus'
 import ModelCard from "../components/ModelCard.vue";
+import DraggableInputTag from "./DraggableInputTag.vue";
 import {getResizedImage, handleClose, messageWithEl, processTemplatesPlain} from "../utils.ts";
 import {open} from "@tauri-apps/plugin-dialog";
 import {platform} from "@tauri-apps/plugin-os";
@@ -472,9 +473,9 @@ const whatIsMyHeight = (size: string, height: number) => {
       </div>
     </template>
     <template #footer>
-      <el-col>
-        <el-input-tag v-model="templater.versions[currentIndex].tags" tag-effect="dark" tag-type="primary"
-                      @change="updateTemplater"/>
+      <el-col style="display: ">
+        <draggable-input-tag v-model="templater.versions[currentIndex].tags" tag-effect="dark" tag-type="primary" clearable
+                             @change="updateTemplater"/>
       </el-col>
       <el-col>
         <el-switch v-model="templater.versions[currentIndex].showImg" :active-action-icon="View"
@@ -523,6 +524,7 @@ const whatIsMyHeight = (size: string, height: number) => {
         </el-col>
         <el-row class="models">
           <model-card v-if="editeVersion.version?.base_model?.uuid"
+                      :key="editeVersion.version.base_model.uuid"
                       :model-uuid="editeVersion.version.base_model.uuid"
                       :model-version="editeVersion.version.base_model.version" hide-footer/>
           <el-card v-else shadow="always" @click="setBaseModel.start(editeVersion.version.base_model)">

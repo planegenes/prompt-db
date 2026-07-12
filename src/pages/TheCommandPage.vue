@@ -1,11 +1,11 @@
 <script lang="ts" setup>
-import {computed, nextTick, onMounted, onUnmounted, ref, Ref, useTemplateRef} from "vue";
+import {computed, nextTick, onMounted, onUnmounted, ref, Ref, useTemplateRef, watch} from "vue";
 import {liveQuery, Subscription} from "dexie";
 import {db} from "../database";
 import {Command} from "../types/command.ts";
 import {ElMessage, ElMessageBox} from "element-plus";
 import {ArrowDown, ArrowRight, Check, Close, CopyDocument, Delete, Edit, Hide, View} from "@element-plus/icons-vue";
-import {handleClose, messageWithEl, processTemplatesPlain} from "../utils.ts";
+import {handleClose, messageWithEl, processTemplatesPlain, debounce} from "../utils.ts";
 import {open} from "@tauri-apps/plugin-dialog";
 import {path} from "@tauri-apps/api";
 import {platform} from "@tauri-apps/plugin-os";
@@ -16,15 +16,37 @@ import ModelCard from "../components/ModelCard.vue";
 import {Model} from "../types/model.ts";
 import {writeText} from "@tauri-apps/plugin-clipboard-manager";
 import ModelSlider from "../components/ModelSlider.vue";
+import DraggableInputTag from "../components/DraggableInputTag.vue";
 
 const nsfwStore = useNSFWStore()
 const recentPage = ref(1)
 
-const filters = ref([])
+const filters = ref('')
+const debouncedFilters = ref('')
 const commands: Ref<Command[]> = ref([])
 let commands_subscription: Subscription | null = null
-const filted = computed(()=>commands.value.filter(val=>filters.value.filter(v=>JSON.stringify(val).indexOf(v)===-1).length === 0))
-const pageCommands = computed(() => filted.value.slice((recentPage.value - 1) * 20, Math.min(recentPage.value * 20, commands.value.length)))
+
+const updateDebouncedFilters = debounce((value: string) => {
+  debouncedFilters.value = value
+}, 300)
+
+watch(filters, (newVal) => {
+  updateDebouncedFilters(newVal)
+}, {immediate: true})
+
+watch(debouncedFilters, () => {
+  recentPage.value = 1
+})
+
+const filted = computed(() => {
+  const keywords = debouncedFilters.value.split(/\s+/).map(k => k.trim().toLowerCase()).filter(Boolean)
+  if (keywords.length === 0) return commands.value
+  return commands.value.filter(val => {
+    const text = JSON.stringify(val).toLowerCase()
+    return keywords.every(k => text.includes(k))
+  })
+})
+const pageCommands = computed(() => filted.value.slice((recentPage.value - 1) * 20, Math.min(recentPage.value * 20, filted.value.length)))
 
 const models: Ref<Model[]> = ref([])
 let models_subscription: Subscription | null = null
@@ -209,7 +231,13 @@ onMounted(() => {
         }
       })
   recentPage.value = Number(sessionStorage.getItem("commandPage") ?? 1)
-  filters.value = JSON.parse(sessionStorage.getItem("commandFilters")) ?? []
+  const saved = sessionStorage.getItem("commandFilters")
+  try {
+    const parsed = saved ? JSON.parse(saved) : null
+    filters.value = Array.isArray(parsed) ? parsed.join(' ') : (saved ?? '')
+  } catch {
+    filters.value = saved ?? ''
+  }
 })
 
 onUnmounted(() => {
@@ -223,7 +251,7 @@ onUnmounted(() => {
 <template>
   <el-button type="success" @click="newCommand" @mouseleave="nsfwStore['cancel']" @mouseover="nsfwStore['load']">ADD
   </el-button>
-  <el-input-tag v-model="filters" @change="filters" size="large" tag-type="primary" tag-effect="dark" style="margin-top: 10px;"/>
+  <el-input v-model="filters" placeholder="输入关键词，空格分隔" size="large" clearable style="margin-top: 10px;"/>
   <el-main class="main">
     <command-card v-for="command in pageCommands" :key="command.uuid"
                   :nsfw="nsfwStore.enable" :prompt-object="command" :rate="nsfwStore.rate"
@@ -245,8 +273,8 @@ onUnmounted(() => {
       </template>
       <template #footer>
         <el-col>
-          <el-input-tag v-model="command.tags" tag-effect="dark" tag-type="primary"
-                        @change="updateCommand(command.uuid, JSON.parse(JSON.stringify(command)))"/>
+          <draggable-input-tag v-model="command.tags" tag-effect="dark" tag-type="primary" clearable
+                               @change="updateCommand(command.uuid, JSON.parse(JSON.stringify(command)))"/>
         </el-col>
         <el-col>
           <el-switch v-model="command.showImg" :active-action-icon="View" :inactive-action-icon="Hide"

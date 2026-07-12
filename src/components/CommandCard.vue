@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {Delete, Plus} from "@element-plus/icons-vue";
 import {handleClose, processTemplates} from "../utils.ts";
-import {defineProps, PropType, ref} from "vue";
+import {defineProps, onBeforeUnmount, PropType, ref} from "vue";
 import {Command} from "../types/command.ts";
 import ColoredImage from "./ColoredImage.vue";
 import {Version} from "../types/version.ts";
@@ -53,6 +53,36 @@ const deleteImg = async () => {
 }
 
 const carousel = ref()
+const manualSwitchLocked = ref(false)
+let manualSwitchTimer: ReturnType<typeof setTimeout> | null = null
+
+const lockManualSwitch = () => {
+  manualSwitchLocked.value = true
+  if (manualSwitchTimer) clearTimeout(manualSwitchTimer)
+  manualSwitchTimer = setTimeout(() => {
+    manualSwitchLocked.value = false
+    manualSwitchTimer = null
+  }, 350)
+}
+
+const handleCarouselClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  const control = target.closest('.el-carousel__arrow, .el-carousel__indicator')
+  if (!control) return
+
+  if (manualSwitchLocked.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
+    return
+  }
+
+  lockManualSwitch()
+}
+
+onBeforeUnmount(() => {
+  if (manualSwitchTimer) clearTimeout(manualSwitchTimer)
+})
 </script>
 
 <template>
@@ -63,9 +93,9 @@ const carousel = ref()
       <slot name="header"/>
     </template>
     <el-carousel v-if="promptObject.showImg" ref="carousel" :autoplay="false" :loop="false"
-                 height="300px">
+                 height="300px" @click.capture="handleCarouselClick">
       <el-carousel-item v-for="(img, index) in promptObject.imgs" :key="img">
-        <colored-image :img="img" :contain-size="512"/>
+        <colored-image :img="img" :contain-size="512" :lazy="false"/>
       </el-carousel-item>
       <el-carousel-item v-if="promptObject.imgs.length === 0"
                         style="display: flex; justify-content: center; align-items: center;"
@@ -125,6 +155,7 @@ const carousel = ref()
   right: 0;
   top: 0;
   border-radius: 5px 0 5px 100%;
+  z-index: 5;
 }
 
 .add-img > :deep(i) {
@@ -138,6 +169,7 @@ const carousel = ref()
   left: 0;
   top: 0;
   border-radius: 0 5px 100% 5px;
+  z-index: 5;
 }
 
 .push-img > :deep(i) {
@@ -151,7 +183,7 @@ const carousel = ref()
   right: 0;
   bottom: 0;
   border-radius: 100% 5px 0 5px;
-  z-index: 99;
+  z-index: 5;
 }
 
 .del-img > :deep(i) {
@@ -168,6 +200,10 @@ const carousel = ref()
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.el-carousel {
+  position: relative;
 }
 
 .el-carousel:not(:first-child) {
@@ -242,6 +278,7 @@ const carousel = ref()
   width: 100%;
   height: max(calc(100% + 15px), 30px);
   z-index: -1;
+  pointer-events: none;
 }
 
 .el-carousel__indicator--horizontal {

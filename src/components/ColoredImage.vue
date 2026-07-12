@@ -19,6 +19,10 @@ const props = defineProps({
   containSize: {
     type: Number,
     default: 512
+  },
+  lazy: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -108,7 +112,7 @@ onMounted(() => {
 
 <template>
   <el-col ref="element" :style="style" style="width: 100%; height: 100%;">
-    <el-image :alt="props.img" :src="previewSrc" fit="scale-down" lazy style="z-index: 1;" @click="showImage.start">
+    <el-image :alt="props.img" :lazy="props.lazy" :src="previewSrc" fit="scale-down" style="z-index: 1;" @click="showImage.start">
       <template #error>
         <div class="image-error-slot"/>
       </template>

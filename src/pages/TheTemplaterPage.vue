@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import {computed, onMounted, onUnmounted, provide, Ref, ref} from "vue";
+import {computed, onMounted, onUnmounted, provide, Ref, ref, watch} from "vue";
 import {db} from "../database";
 import {Templater} from "../types/templater.ts";
 import {ElMessage, ElMessageBox} from 'element-plus'
@@ -9,15 +9,38 @@ import {useNSFWStore} from '../store/nsfwStore.ts';
 import emitter from "../mitt.ts";
 import {Version} from "../types/version.ts";
 import TemplaterCard from "../components/TemplaterCard.vue";
+import DraggableInputTag from "../components/DraggableInputTag.vue";
+import {debounce} from "../utils.ts";
 
 const nsfwStore = useNSFWStore()
 const recentPage = ref(1)
 
-const filters = ref([])
+const filters = ref('')
+const debouncedFilters = ref('')
 const templaters: Ref<Templater[]> = ref([])
 let templaters_subscription: Subscription | null = null
-const filted = computed(()=>templaters.value.filter(val=>filters.value.filter(v=>JSON.stringify(val).indexOf(v)===-1).length === 0))
-const pageTemplaters = computed(() => filted.value.slice((recentPage.value - 1) * 20, Math.min(recentPage.value * 20, templaters.value.length)))
+
+const updateDebouncedFilters = debounce((value: string) => {
+  debouncedFilters.value = value
+}, 300)
+
+watch(filters, (newVal) => {
+  updateDebouncedFilters(newVal)
+}, {immediate: true})
+
+watch(debouncedFilters, () => {
+  recentPage.value = 1
+})
+
+const filted = computed(() => {
+  const keywords = debouncedFilters.value.split(/\s+/).map(k => k.trim().toLowerCase()).filter(Boolean)
+  if (keywords.length === 0) return templaters.value
+  return templaters.value.filter(val => {
+    const text = JSON.stringify(val).toLowerCase()
+    return keywords.every(k => text.includes(k))
+  })
+})
+const pageTemplaters = computed(() => filted.value.slice((recentPage.value - 1) * 20, Math.min(recentPage.value * 20, filted.value.length)))
 
 const models: Ref<Model[]> = ref([])
 let models_subscription: Subscription | null = null
@@ -63,7 +86,13 @@ onMounted(() => {
         }
       })
   recentPage.value = Number(sessionStorage.getItem("templaterPage") ?? 1)
-  filters.value = JSON.parse(sessionStorage.getItem("templaterFilters")) ?? []
+  const saved = sessionStorage.getItem("templaterFilters")
+  try {
+    const parsed = saved ? JSON.parse(saved) : null
+    filters.value = Array.isArray(parsed) ? parsed.join(' ') : (saved ?? '')
+  } catch {
+    filters.value = saved ?? ''
+  }
 })
 
 onUnmounted(() => {
@@ -77,7 +106,7 @@ onUnmounted(() => {
 <template>
   <el-button type="primary" @click="newTemplater" @mouseleave="nsfwStore['cancel']" @mouseover="nsfwStore['load']">ADD
   </el-button>
-  <el-input-tag v-model="filters" @change="filters" size="large" tag-type="primary" tag-effect="dark" style="margin-top: 10px;"/>
+  <el-input v-model="filters" placeholder="输入关键词，空格分隔" size="large" clearable style="margin-top: 10px;"/>
   <el-main class="main">
     <templater-card v-for="templater in pageTemplaters" :key="templater.uuid" :templater="templater"/>
   </el-main>

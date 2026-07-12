@@ -5,6 +5,7 @@ import {db} from "../database";
 import {Model} from "../types/model.ts";
 import {ElMessage, ElMessageBox} from "element-plus";
 import {Check, Close, CopyDocument, Delete, Edit} from "@element-plus/icons-vue";
+import DraggableInputTag from "../components/DraggableInputTag.vue";
 import {debounce, handleClose, processTemplates} from "../utils.ts";
 
 const models: Ref<Model[]> = ref([])
@@ -150,8 +151,8 @@ onUnmounted(() => {
           <el-text v-if="model.dewords" type="info" v-html="processTemplates(model.dewords)"/>
         </span>
         <template #footer>
-          <el-input-tag v-model="model.tags" tag-effect="dark" tag-type="primary"
-                        @change="(value: string[])=>updateModel(model.uuid, JSON.parse(JSON.stringify(model)))"/>
+          <draggable-input-tag v-model="model.tags" tag-effect="dark" tag-type="primary" clearable
+                               @change="(value: string[])=>updateModel(model.uuid, JSON.parse(JSON.stringify(model)))"/>
         </template>
       </el-card>
     </el-badge>
@@ -198,13 +199,13 @@ onUnmounted(() => {
       </el-select>
       <el-col class="grid2">
         <el-text size="large">版本</el-text>
-        <el-input-tag v-model="editeModel.model.versions" :delimiter="editeModel.spaceDelimit" tag-effect="plain"
-                      tag-type="primary"/>
+        <draggable-input-tag v-model="editeModel.model.versions" :delimiter="editeModel.spaceDelimit" tag-effect="plain"
+                             tag-type="primary" clearable/>
       </el-col>
       <el-col class="grid2">
         <el-text size="large">标签</el-text>
-        <el-input-tag v-model="editeModel.model.labels" :delimiter="editeModel.spaceDelimit" tag-effect="plain"
-                      tag-type="primary"/>
+        <draggable-input-tag v-model="editeModel.model.labels" :delimiter="editeModel.spaceDelimit" tag-effect="plain"
+                             tag-type="primary" clearable/>
       </el-col>
       <el-col class="grid2">
         <el-text size="large">分割字符</el-text>
