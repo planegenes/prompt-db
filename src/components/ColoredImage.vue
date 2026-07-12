@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {convertFileSrc} from "@tauri-apps/api/core";
 import {nextTick, onMounted, ref} from "vue";
-import {getImageSize, messageWithEl} from "../utils.ts";
+import {getImageSize, getResizedImage, messageWithEl} from "../utils.ts";
 import autohue from 'autohue.js'
 import {ElImage} from "element-plus";
 import {CopyDocument} from "@element-plus/icons-vue";
@@ -12,14 +12,22 @@ const props = defineProps({
   img: {
     type: String
   },
-  shouldLoad: {
-    type: Boolean,
-    default: false
+  /**
+   * 预览图的目标尺寸（contain 模式：长边对齐该尺寸）。
+   * 预览图区域尺寸固定，因此直接写死传入即可。
+   */
+  containSize: {
+    type: Number,
+    default: 512
   }
 })
 
-const imgSrc = ref("")
-const imgUrl = ref("")
+// 预览图（缩略图）
+const previewSrc = ref("")
+const previewUrl = ref("")
+// 原图（仅在弹窗显示时加载）
+const origSrc = ref("")
+
 const element = ref()
 const width = ref(1)
 const height = ref(1)
@@ -29,18 +37,9 @@ const style = ref({
   backgroundImage: ""
 })
 
-const setWH = () => {
-  if (picW) return
-
-  getImageSize(props.img).then((v) => {
-    ({width: picW, height: picH} = {...v})
-    loadImage()
-  })
-}
-
-const setBG = () => {
-  if (picW && style.value.backgroundImage.length === 0 && imgSrc.value.length > 0) {
-    autohue(imgSrc.value, {
+const loadBackground = () => {
+  if (picW && style.value.backgroundImage.length === 0 && previewSrc.value.length > 0) {
+    autohue(previewSrc.value, {
       threshold: 5,
       maxSize: 50
     })
@@ -59,43 +58,61 @@ const setBG = () => {
   }
 }
 
-const setIMG = () => {
-  if (imgSrc.value.length === 0)
-    imgSrc.value = convertFileSrc(props.img)
+const setWH = () => {
+  if (picW) return
 
-  if (imgUrl.value.length === 0)
-    imgUrl.value = `url(${imgSrc.value})`
+  getImageSize(props.img).then((v) => {
+    ({width: picW, height: picH} = {...v})
+    loadBackground()
+  })
 }
 
-const loadImage = () => {
-  setIMG()
-  setBG()
+// 预览图直接加载，不等待、不 progressive
+const loadPreview = async () => {
+  if (previewSrc.value.length > 0) return
+
+  try {
+    const resizedPath = await getResizedImage(props.img, props.containSize, 'contain')
+    previewSrc.value = convertFileSrc(resizedPath)
+  } catch (error) {
+    console.error('预览图生成失败，回退到原图:', error)
+    previewSrc.value = convertFileSrc(props.img)
+  }
+
+  previewUrl.value = `url(${previewSrc.value})`
   setWH()
+}
+
+// 原图只在弹窗显示时加载
+const loadOrig = () => {
+  if (origSrc.value.length === 0)
+    origSrc.value = convertFileSrc(props.img)
 }
 
 const showImage = ref({
   show: false,
   fileName: await path.basename(props.img),
   start: () => {
-    if (imgSrc.value.length !== 0)
-      showImage.value.show = true
+    loadOrig()
+    showImage.value.show = true
   }
 })
-
-defineExpose({loadImage})
 
 onMounted(() => {
   nextTick(() => {
     [width.value, height.value] = [element.value.$el.clientWidth, element.value.$el.clientHeight]
-    if (props.shouldLoad)
-      loadImage()
+    loadPreview()
   })
 })
 </script>
 
 <template>
   <el-col ref="element" :style="style" style="width: 100%; height: 100%;">
-    <el-image :alt="props.img" :src="imgSrc" fit="scale-down" style="z-index: 1;" @click="showImage.start"/>
+    <el-image :alt="props.img" :src="previewSrc" fit="scale-down" lazy style="z-index: 1;" @click="showImage.start">
+      <template #error>
+        <div class="image-error-slot"/>
+      </template>
+    </el-image>
   </el-col>
   <el-dialog v-model="showImage.show" align-center append-to-body width="auto">
     <template #title>
@@ -105,7 +122,7 @@ onMounted(() => {
         {{ showImage.fileName }}
       </el-text>
     </template>
-    <img id="show-img" :alt="props.img" :src="imgSrc"/>
+    <img v-if="showImage.show" id="show-img" :alt="props.img" :src="origSrc"/>
   </el-dialog>
 </template>
 
@@ -124,9 +141,15 @@ onMounted(() => {
   height: 100%;
 }
 
+.image-error-slot {
+  width: 100%;
+  height: 100%;
+  background-color: var(--el-fill-color-light);
+}
+
 .el-col::after {
   content: "";
-  background-image: v-bind(imgUrl);
+  background-image: v-bind(previewUrl);
   background-position: center;
   background-size: contain;
   position: absolute;

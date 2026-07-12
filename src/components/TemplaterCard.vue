@@ -16,7 +16,7 @@ import {db} from "../database";
 import {Templater} from "../types/templater.ts";
 import {ElMessage, ElMessageBox, ElSelect} from 'element-plus'
 import ModelCard from "../components/ModelCard.vue";
-import {handleClose, messageWithEl, processTemplatesPlain} from "../utils.ts";
+import {getResizedImage, handleClose, messageWithEl, processTemplatesPlain} from "../utils.ts";
 import {open} from "@tauri-apps/plugin-dialog";
 import {platform} from "@tauri-apps/plugin-os";
 import {path} from "@tauri-apps/api";
@@ -43,6 +43,43 @@ const versions = computed(() => props.templater.versions.map(v => v.title))
 const currentIndex = ref(0)
 
 const hoverIndex = ref(-1)
+
+// 版本 tag hover 缩略图缓存
+const hoverThumbMap = ref(new Map<number, string>())
+// 缩略图容器目标尺寸，用于宽高变化动画
+const thumbSizeMap = ref(new Map<number, { width: number; height: number }>())
+
+const onThumbLoad = (index: number, e: Event) => {
+  const img = e.target as HTMLImageElement
+  thumbSizeMap.value.set(index, {
+    width: img.naturalWidth,
+    height: img.naturalHeight,
+  })
+}
+
+const getThumbSizeStyle = (index: number) => {
+  const size = thumbSizeMap.value.get(index)
+  if (size) {
+    return { width: `${size.width}px`, height: `${size.height}px` }
+  }
+  return { width: '200px', height: '200px' }
+}
+
+const loadHoverThumb = async (index: number) => {
+  if (hoverThumbMap.value.has(index)) return
+
+  const imgs = props.templater.versions[index]?.imgs
+  if (!imgs || imgs.length === 0) return
+
+  const path = imgs[0]
+  try {
+    // cover 模式：短边对齐 200px，填满 200×200 的显示区域
+    const thumb = await getResizedImage(path, 200, 'cover')
+    hoverThumbMap.value.set(index, convertFileSrc(thumb))
+  } catch (e) {
+    hoverThumbMap.value.set(index, convertFileSrc(path))
+  }
+}
 
 const editTitle = ref({
   enabled: false,
@@ -385,23 +422,39 @@ const whatIsMyHeight = (size: string, height: number) => {
       </div>
       <div class="views">
         <el-popover v-for="(tag, index) in versions" :key="tag"
-                    :disabled="templater.versions[index].imgs.length === 0 || index===currentIndex" placement="bottom"
-                    trigger="hover" :teleported="false">
+                    :disabled="templater.versions[index].imgs.length === 0 || index===currentIndex"
+                    width="auto"
+                    placement="bottom"
+                    trigger="hover"
+                    @show="loadHoverThumb(index)">
           <template #reference>
             <el-tag :checked="index===currentIndex"
                     :effect="index===hoverIndex?'dark':index===currentIndex?'light':'plain'"
                     closable
                     style="cursor: pointer;" @click="currentIndex=index"
                     @close="handleClose(()=>deleteVersion(index), 'Are you sure to delete this version?')"
-                    @mouseleave="hoverIndex=-1" @mouseover="hoverIndex=index">{{ tag }}
+                    @mouseleave="hoverIndex=-1"
+                    @mouseover="hoverIndex=index">{{ tag }}
             </el-tag>
           </template>
-          <el-col v-if="templater.versions[index].imgs.length">
+          <div
+              v-if="templater.versions[index].imgs.length"
+              class="thumb-wrapper"
+              :style="getThumbSizeStyle(index)">
             <el-image
+                v-if="hoverThumbMap.has(index)"
+                class="thumb-fade"
+                fit="cover"
                 :alt="templater.versions[index].imgs[0]"
-                :src="convertFileSrc(templater.versions[index].imgs[0])"
+                :src="hoverThumbMap.get(index)"
+                @load="onThumbLoad(index, $event)"
                 :style="{filter: nsfwStore.enable || (templater.versions[index].rate <= nsfwStore.rate) ? 'none': 'contrast(0)'}"/>
-          </el-col>
+            <div
+                v-else
+                class="thumb-loading">
+              <span class="thumb-loading-text">Loading...</span>
+            </div>
+          </div>
         </el-popover>
         <el-button class="button-new-tag" size="small" @click="newVersion">
           + New Tag
@@ -1320,5 +1373,67 @@ const whatIsMyHeight = (size: string, height: number) => {
 
 .el-image:hover {
   filter: contrast(100%) !important;
+}
+
+/* 缩略图容器：带宽高变化过渡 */
+.thumb-wrapper {
+  width: 200px;
+  height: 200px;
+  min-width: 200px;
+  min-height: 200px;
+  overflow: hidden;
+  border-radius: var(--el-border-radius-base);
+  transition: width 0.3s ease, height 0.3s ease;
+}
+
+/* 缩略图加载占位骨架屏 */
+.thumb-loading {
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--el-border-radius-base);
+  background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: thumb-shimmer 1.5s infinite linear;
+}
+
+.thumb-loading-text {
+  color: #999;
+  font-size: 12px;
+  animation: thumb-pulse 1s infinite ease-in-out;
+}
+
+/* 缩略图淡入 */
+.thumb-fade {
+  animation: thumb-fade-in 0.3s ease-in;
+}
+
+@keyframes thumb-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes thumb-pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes thumb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 </style>

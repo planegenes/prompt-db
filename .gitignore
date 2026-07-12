@@ -24,3 +24,7 @@ dist-ssr
 
 # Tauri
 src-tauri/target
+.gitnexus
+.claude/*
+AGENTS.md
+CLAUDE.md

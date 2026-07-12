@@ -172,3 +172,41 @@ export const messageWithEl = async (theMessage: string, theType: string, fun: ()
     ElMessage({message: theMessage, type: theType, plain: true})
     await fun()
 }
+
+/**
+ * 获取本地图片调整大小后的缓存路径。
+ *
+ * `mode` 语义同 CSS `background-size`：
+ * - `"cover"`：短边对齐 `size`，填满目标区域，超出部分被裁剪。
+ * - `"contain"`：长边对齐 `size`，图片完整显示，可能有留白。
+ *
+ * @param filePath 图片绝对路径
+ * @param size 目标尺寸
+ * @param mode 缩放模式
+ * @returns 调整后图片的绝对路径
+ */
+export const getResizedImage = async (
+    filePath: string,
+    size: number,
+    mode: 'cover' | 'contain' = 'contain'
+): Promise<string> => {
+    return await invoke('get_resized_image', {
+        path: filePath,
+        size,
+        mode,
+    });
+}
+
+/**
+ * 通用防抖函数
+ */
+export function debounce<T extends (...args: any[]) => any>(
+    fn: T,
+    delay: number = 200
+): (...args: Parameters<T>) => void {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return (...args: Parameters<T>) => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+    };
+}

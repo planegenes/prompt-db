@@ -1,17 +1,47 @@
 <script lang="ts" setup>
-import {computed, onMounted, onUnmounted, ref, Ref} from "vue";
+import {computed, onMounted, onUnmounted, ref, Ref, watch} from "vue";
 import {liveQuery, Subscription} from "dexie";
 import {db} from "../database";
 import {Model} from "../types/model.ts";
 import {ElMessage, ElMessageBox} from "element-plus";
 import {Check, Close, CopyDocument, Delete, Edit} from "@element-plus/icons-vue";
-import {handleClose, processTemplates} from "../utils.ts";
+import {debounce, handleClose, processTemplates} from "../utils.ts";
 
 const models: Ref<Model[]> = ref([])
 let models_subscription: Subscription | null = null
 
-const filters = ref([])
-const filted = computed(()=>models.value.filter(val=>filters.value.filter(v=>JSON.stringify(val).indexOf(v)===-1).length === 0))
+const filters = ref('')
+const debouncedFilters = ref('')
+const currentPage = ref(1)
+const pageSize = 100
+
+const updateDebouncedFilters = debounce((value: string) => {
+  debouncedFilters.value = value
+}, 300)
+
+watch(filters, (newVal) => {
+  updateDebouncedFilters(newVal)
+}, { immediate: true })
+
+watch(debouncedFilters, () => {
+  currentPage.value = 1
+})
+
+const filted = computed(() => {
+  const keywords = debouncedFilters.value.split(/\s+/).map(k => k.trim().toLowerCase()).filter(Boolean)
+  if (keywords.length === 0) return models.value
+  return models.value.filter(val => {
+    const text = JSON.stringify(val).toLowerCase()
+    return keywords.every(k => text.includes(k))
+  })
+})
+
+const pagedModels = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filted.value.slice(start, start + pageSize)
+})
+
+const total = computed(() => filted.value.length)
 
 const type_badges = [
   {text: "B", color: "Salmon"},
@@ -92,9 +122,9 @@ onUnmounted(() => {
 
 <template>
   <el-button type="danger" @click="newModel">ADD</el-button>
-  <el-input-tag v-model="filters" @change="filters" size="large" tag-type="primary" tag-effect="dark" style="margin-top: 10px;"/>
+  <el-input v-model="filters" placeholder="输入关键词，空格分隔" size="large" clearable style="margin-top: 10px;"/>
   <el-main class="main">
-    <el-badge v-for="model in filted" :key="model.uuid" :color="type_badges[model.type].color" :offset="[-2,2]"
+    <el-badge v-for="model in pagedModels" :key="model.uuid" :color="type_badges[model.type].color" :offset="[-2,2]"
               :value="type_badges[model.type].text" class="card"
               @dblclick="updateModel(model.uuid, {type: (model.type+1)%3})">
       <el-card>
@@ -126,6 +156,14 @@ onUnmounted(() => {
       </el-card>
     </el-badge>
   </el-main>
+  <el-pagination
+      v-if="total > pageSize"
+      v-model:current-page="currentPage"
+      :page-size="pageSize"
+      :total="total"
+      layout="prev, pager, next, jumper, total"
+      style="justify-content: center; margin-top: 10px;"
+  />
   <el-dialog
       v-if="editeModel.show"
       v-model="editeModel.show"

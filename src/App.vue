@@ -233,7 +233,7 @@ div[role="dialog"]::-webkit-scrollbar {
 </style>
 
 <style>
-div[class*="el-scrollbar"] {
+div[class*="el-scrollbar"]:not([class*="el-select"]) {
   overflow: visible;
 }
 </style>

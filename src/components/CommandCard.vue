@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {Delete, Plus} from "@element-plus/icons-vue";
 import {handleClose, processTemplates} from "../utils.ts";
-import {defineProps, nextTick, PropType, ref} from "vue";
+import {defineProps, PropType, ref} from "vue";
 import {Command} from "../types/command.ts";
 import ColoredImage from "./ColoredImage.vue";
 import {Version} from "../types/version.ts";
@@ -53,7 +53,6 @@ const deleteImg = async () => {
 }
 
 const carousel = ref()
-const imageComponents = new Map()
 </script>
 
 <template>
@@ -64,9 +63,9 @@ const imageComponents = new Map()
       <slot name="header"/>
     </template>
     <el-carousel v-if="promptObject.showImg" ref="carousel" :autoplay="false" :loop="false"
-                 height="300px" @change="(v1,v2)=>(nextTick(()=>imageComponents.get(v1).loadImage()))">
+                 height="300px">
       <el-carousel-item v-for="(img, index) in promptObject.imgs" :key="img">
-        <colored-image :ref="el => { if (el) imageComponents.set(index,el) }" :img="img" :should-load="index===0"/>
+        <colored-image :img="img" :contain-size="512"/>
       </el-carousel-item>
       <el-carousel-item v-if="promptObject.imgs.length === 0"
                         style="display: flex; justify-content: center; align-items: center;"
